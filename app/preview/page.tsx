@@ -77,7 +77,6 @@ function PreviewContent() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-          {/* View toggle */}
           <div style={{ display: 'flex', background: 'var(--dark-3)', borderRadius: '6px', padding: '3px', border: '1px solid var(--border)' }}>
             {(['desktop', 'mobile'] as const).map(v => (
               <button
@@ -121,18 +120,16 @@ function PreviewContent() {
       <div style={{
         flex: 1,
         background: '#e5e5e5',
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'center',
-        padding: view === 'mobile' ? '24px' : '0',
         overflowY: 'auto',
+        padding: view === 'mobile' ? '24px' : '0',
+        display: 'flex',
+        justifyContent: 'center',
       }}>
         <iframe
           srcDoc={page.html}
           style={{
-  width: view === 'mobile' ? '390px' : '100%',
-  minHeight: '100vh',
-  height: view === 'mobile' ? '844px' : '800px',
+            width: view === 'mobile' ? '390px' : '100%',
+            height: view === 'mobile' ? '844px' : '5000px',
             border: view === 'mobile' ? '8px solid #222' : 'none',
             borderRadius: view === 'mobile' ? '32px' : '0',
             background: '#fff',

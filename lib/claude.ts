@@ -6,7 +6,7 @@ export const anthropic = new Anthropic({
 
 export async function generateAdvertorial(prompt: string): Promise<string> {
   const message = await anthropic.messages.create({
-    model: 'claude-opus-4-5',
+    model: 'claude-opus-4-7',
     max_tokens: 8192,
     messages: [{ role: 'user', content: prompt }],
   })

@@ -54,19 +54,17 @@ export default function Home() {
             <span style={{ color: 'var(--accent)' }}>Ship in minutes.</span>
           </h1>
           <p style={{ fontSize: '18px', color: 'var(--text-muted)', maxWidth: '520px', lineHeight: 1.6 }}>
-            Pick a proven template or clone any advertorial from the web. Fill in your copy and export HTML straight to Shopify.
+            Paste any page's HTML and get a pixel-perfect clone ready to deploy on Shopify in seconds.
           </p>
         </div>
 
-        {/* Two main options */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '64px' }}>
-          {/* Clone mode */}
+        {/* Clone only */}
+        <div style={{ marginBottom: '64px' }}>
           <Link href="/clone" style={{ textDecoration: 'none' }}>
             <div className="card" style={{
               cursor: 'pointer',
               transition: 'all 0.2s',
-              position: 'relative',
-              overflow: 'hidden',
+              maxWidth: '400px',
             }}
             onMouseEnter={e => {
               (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'
@@ -81,47 +79,15 @@ export default function Home() {
                 background: 'rgba(255,77,0,0.12)', display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
                 fontSize: '22px', marginBottom: '20px'
-              }}>🔗</div>
+              }}>📋</div>
               <h2 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '10px', letterSpacing: '-0.02em' }}>
-                Clone a URL
+                Clone a Page
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '15px', lineHeight: 1.6, marginBottom: '24px' }}>
-                Paste any winning advertorial URL. AI scrapes its structure and rebuilds it with your copy.
+                Paste any page's HTML. AI replicates it 1:1 — every section, color, font and layout. Ready for Shopify.
               </p>
               <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px' }}>
                 Start cloning →
-              </div>
-            </div>
-          </Link>
-
-          {/* Template mode */}
-          <Link href="/template" style={{ textDecoration: 'none' }}>
-            <div className="card" style={{
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)'
-              ;(e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'
-              ;(e.currentTarget as HTMLElement).style.transform = 'translateY(0)'
-            }}>
-              <div style={{
-                width: '44px', height: '44px', borderRadius: '10px',
-                background: 'rgba(255,77,0,0.12)', display: 'flex',
-                alignItems: 'center', justifyContent: 'center',
-                fontSize: '22px', marginBottom: '20px'
-              }}>📄</div>
-              <h2 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '10px', letterSpacing: '-0.02em' }}>
-                Use a Template
-              </h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '15px', lineHeight: 1.6, marginBottom: '24px' }}>
-                Pick from proven advertorial templates. Fill in your product details and go live instantly.
-              </p>
-              <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '14px' }}>
-                Browse templates →
               </div>
             </div>
           </Link>
