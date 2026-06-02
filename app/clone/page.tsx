@@ -8,11 +8,19 @@ export default function ClonePage() {
   const [step, setStep] = useState<'input' | 'generating'>('input')
   const [rawHtml, setRawHtml] = useState('')
   const [pageTitle, setPageTitle] = useState('')
+  const [screenshot, setScreenshot] = useState<string>('') // base64 data URL
   const [error, setError] = useState('')
 
+  function handleScreenshot(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => setScreenshot(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
   async function handleGenerate() {
-    
-    if (!rawHtml.trim()) return setError('Please paste the page HTML')
+    if (!rawHtml.trim()) return setError('Please paste the page HTML + CSS blob')
     if (!pageTitle.trim()) return setError('Please add a page title')
     setStep('generating')
     setError('')
@@ -20,7 +28,7 @@ export default function ClonePage() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'clone', scrapedHtml: rawHtml }),
+        body: JSON.stringify({ type: 'clone', scrapedHtml: rawHtml, screenshot }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Generation failed')
@@ -28,12 +36,7 @@ export default function ClonePage() {
       const saveRes = await fetch('/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: pageTitle,
-          html: data.html,
-          type: 'clone'
-        
-        }),
+        body: JSON.stringify({ title: pageTitle, html: data.html, type: 'clone' }),
       })
       const saved = await saveRes.json()
       router.push(`/preview?id=${saved.id}`)
@@ -42,6 +45,9 @@ export default function ClonePage() {
       setStep('input')
     }
   }
+
+  // The snippet the user pastes into the DevTools console to capture HTML + CSS.
+  const consoleSnippet = `(async()=>{let c='';for(const s of document.styleSheets){try{for(const r of s.cssRules)c+=r.cssText+'\\n'}catch(e){if(s.href){try{c+=await(await fetch(s.href)).text()+'\\n'}catch(_){}}}}const d=document.documentElement.cloneNode(true);d.querySelectorAll('script,noscript,link[rel="stylesheet"],iframe').forEach(n=>n.remove());d.querySelectorAll('img').forEach(i=>{const r=i.currentSrc||i.src;if(r)i.setAttribute('src',r);i.removeAttribute('srcset')});const h=d.querySelector('head')||d;const t=document.createElement('style');t.textContent=c;h.appendChild(t);const o='<!DOCTYPE html>\\n'+d.outerHTML;try{await navigator.clipboard.writeText(o);console.log('✅ Copied '+o.length+' chars')}catch(e){console.log(o)}})();`
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -58,13 +64,36 @@ export default function ClonePage() {
               Clone a Landing Page
             </h1>
             <p style={{ color: 'var(--text-muted)', marginBottom: '28px', lineHeight: 1.6 }}>
-              We take screenshots of the page for the visual design, plus use the HTML for content. Together = the most accurate clone possible.
+              The accuracy depends entirely on capturing the page's <strong>CSS</strong>, not just its HTML.
+              Use the one-line capture script below — it grabs the full HTML <em>with all styles inlined</em>.
+              Optionally add a screenshot for an even closer match.
             </p>
 
+            {/* Capture instructions */}
+            <div className="card" style={{ marginBottom: '24px', padding: '20px' }}>
+              <p style={{ fontWeight: 600, fontFamily: 'var(--font-display)', fontSize: '14px', marginBottom: '12px' }}>
+                📋 How to capture (do this on the page you want to clone):
+              </p>
+              <ol style={{ color: 'var(--text-muted)', fontSize: '13px', lineHeight: 1.8, paddingLeft: '18px', margin: 0 }}>
+                <li>Open the page → press <code style={codeStyle}>F12</code> → click the <strong>Console</strong> tab</li>
+                <li>Paste the script below, hit Enter (you may need to type <code style={codeStyle}>allow pasting</code> first)</li>
+                <li>It copies the full HTML + CSS to your clipboard — paste it in the box below</li>
+              </ol>
+              <textarea
+                readOnly
+                value={consoleSnippet}
+                onClick={e => (e.currentTarget as HTMLTextAreaElement).select()}
+                style={{
+                  width: '100%', marginTop: '12px', background: 'var(--dark-3)',
+                  border: '1px solid var(--border)', borderRadius: '8px', color: 'var(--accent-light)',
+                  fontFamily: 'monospace', fontSize: '11px', padding: '12px', resize: 'vertical',
+                  minHeight: '70px', outline: 'none',
+                }}
+              />
+            </div>
+
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-display)', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>
-                Page Title (for saving)
-              </label>
+              <label style={labelStyle}>Page Title (for saving)</label>
               <input
                 className="input"
                 type="text"
@@ -74,23 +103,28 @@ export default function ClonePage() {
               />
             </div>
 
-            
-
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-display)', marginBottom: '8px', color: 'rgba(255,255,255,0.7)' }}>
-                Page HTML
-              </label>
+              <label style={labelStyle}>Page HTML + CSS (from the capture script)</label>
               <textarea
                 className="input"
                 rows={10}
                 value={rawHtml}
                 onChange={e => setRawHtml(e.target.value)}
-                placeholder="Inspect the page → right-click <body> tag → Copy → Copy outerHTML → paste here"
+                placeholder="Paste the output of the capture script here..."
                 style={{ fontFamily: 'monospace', fontSize: '12px' }}
               />
               <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '6px' }}>
-                This gives Claude all the text content, images, and structure.
+                This gives Claude the real colors, fonts, spacing and layout — not just guesses.
               </p>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={labelStyle}>Screenshot (optional, but improves accuracy)</label>
+              <input type="file" accept="image/*" onChange={handleScreenshot}
+                style={{ color: 'var(--text-muted)', fontSize: '13px' }} />
+              {screenshot && (
+                <img src={screenshot} alt="preview" style={{ marginTop: '10px', maxWidth: '100%', borderRadius: '8px', border: '1px solid var(--border)' }} />
+              )}
             </div>
 
             {error && <p style={{ color: '#ff6b6b', fontSize: '14px', marginBottom: '16px' }}>{error}</p>}
@@ -103,10 +137,10 @@ export default function ClonePage() {
 
         {step === 'generating' && (
           <div className="fade-in" style={{ textAlign: 'center', padding: '60px 0' }}>
-            <div style={{ fontSize: '48px', marginBottom: '24px' }}>📸</div>
+            <div style={{ fontSize: '48px', marginBottom: '24px' }}>🧬</div>
             <h2 style={{ fontSize: '28px', fontWeight: 800, marginBottom: '12px' }}>Cloning your page...</h2>
             <p style={{ color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '8px' }}>
-              Taking screenshots + analyzing HTML then rebuilding as clean Shopify-ready HTML.
+              Preserving the original structure, styles and content as a clean Shopify-ready file.
             </p>
             <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Takes about 30–60 seconds.</p>
             <div style={{ marginTop: '32px', display: 'flex', justifyContent: 'center' }}>
@@ -118,4 +152,12 @@ export default function ClonePage() {
       </div>
     </div>
   )
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: '13px', fontWeight: 600,
+  fontFamily: 'var(--font-display)', marginBottom: '8px', color: 'rgba(255,255,255,0.7)',
+}
+const codeStyle: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.1)', padding: '1px 6px', borderRadius: '3px', fontSize: '12px',
 }
