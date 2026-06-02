@@ -13,14 +13,6 @@ export async function POST(req: NextRequest) {
     let html = ''
 
     if (type === 'clone') {
-      // Size guard: ~4 chars per token. Cap source at ~700k chars (~175k tokens)
-      // so we never hit the 1M input limit even with a screenshot attached.
-      const MAX_CHARS = 700000
-      let source = scrapedHtml || ''
-      if (source.length > MAX_CHARS) {
-        source = source.slice(0, MAX_CHARS)
-      }
-
       // Build the message content. If a screenshot is provided, send it as an
       // image block so the model can SEE the real layout, not just guess from markup.
       const userContent: Anthropic.MessageParam['content'] = []
@@ -65,7 +57,7 @@ OUTPUT RULES:
 - Output ONLY raw HTML. No explanation, no markdown, no code fences.
 
 HERE IS THE SOURCE (HTML with CSS inlined):
-${source}`,
+${scrapedHtml || ''}`,
       })
 
       const message = await anthropic.messages.create({
