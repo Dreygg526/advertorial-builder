@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 
+// Allow long generations + force this route to run dynamically.
+export const maxDuration = 300 // seconds (5 min) — for long page generations
+export const dynamic = 'force-dynamic'
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
+  timeout: 240 * 1000, // 4 min, then throw instead of hanging forever
 })
 
 // ~4 chars per token. Cap input at ~3.2M chars (~800k tokens) to leave
@@ -11,7 +16,7 @@ const MAX_INPUT_CHARS = 3_200_000
 
 export async function POST(req: NextRequest) {
   try {
-    // `screenshot` is an optional base64 data URL of the page (data:image/png;base64,...)
+    // `screenshot` is an optional base64 data URL (data:image/png;base64,...)
     const { type, copy, templateId, scrapedHtml, screenshot } = await req.json()
 
     let html = ''
@@ -74,7 +79,7 @@ ${source}`,
 
       const message = await anthropic.messages.create({
         model: 'claude-opus-4-8',
-        max_tokens: 128000,
+        max_tokens: 32000,
         messages: [{ role: 'user', content: userContent }],
       })
 
@@ -128,6 +133,7 @@ OUTPUT: Complete self-contained HTML only. No explanations. No markdown.`
     return NextResponse.json({ html })
   } catch (e: any) {
     console.error('Generate error:', e)
-    return NextResponse.json({ error: e.message || 'Generation failed' }, { status: 500 })
+    // Always return JSON so the frontend never chokes on "not valid JSON"
+    return NextResponse.json({ error: e?.message || 'Generation failed' }, { status: 500 })
   }
 }

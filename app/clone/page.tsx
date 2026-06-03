@@ -30,8 +30,17 @@ export default function ClonePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'clone', scrapedHtml: rawHtml, screenshot }),
       })
-      const data = await res.json()
+
+      // Read as text FIRST, then parse — so a non-JSON error stays readable
+      const raw = await res.text()
+      let data: any
+      try {
+        data = JSON.parse(raw)
+      } catch {
+        throw new Error(`Server error (${res.status}): ${raw.slice(0, 200)}`)
+      }
       if (!res.ok) throw new Error(data.error || 'Generation failed')
+      if (data.warning) alert(data.warning)
 
       const saveRes = await fetch('/api/save', {
         method: 'POST',
