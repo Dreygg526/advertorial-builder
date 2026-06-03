@@ -1,81 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 
-// Allow long generations + force this route to run dynamically.
-export const maxDuration = 300 // seconds (5 min) — for long page generations
+export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
-  timeout: 240 * 1000, // 4 min, then throw instead of hanging forever
+  timeout: 240 * 1000,
 })
 
-// ~4 chars per token. Cap input at ~3.2M chars (~800k tokens) to leave
-// headroom under the 1M limit for the screenshot + system overhead.
 const MAX_INPUT_CHARS = 3_200_000
 
 export async function POST(req: NextRequest) {
   try {
-    // `screenshot` is an optional base64 data URL (data:image/png;base64,...)
     const { type, copy, templateId, scrapedHtml, screenshot } = await req.json()
 
     let html = ''
 
     if (type === 'clone') {
-      // Guard the input so we fail soft instead of throwing the raw 400 at the user.
       let source = scrapedHtml || ''
-      let trimmed = false
-      if (source.length > MAX_INPUT_CHARS) {
-        source = source.slice(0, MAX_INPUT_CHARS)
-        trimmed = true
-      }
+      if (source.length > MAX_INPUT_CHARS) source = source.slice(0, MAX_INPUT_CHARS)
 
-      // Build the message content. If a screenshot is provided, send it as an
-      // image block so the model can SEE the real layout, not just guess from markup.
+      const hasScreenshot =
+        typeof screenshot === 'string' && screenshot.startsWith('data:image')
+
+      // Auto-detect mode: real HTML markup -> PRESERVE; lean extract -> REBUILD.
+      const looksLikeHtml = /<\s*(div|section|body|html|header|main|p|h1|img)[\s>]/i.test(source)
+      const mode = looksLikeHtml ? 'preserve' : 'rebuild'
+
       const userContent: Anthropic.MessageParam['content'] = []
 
-      if (screenshot && typeof screenshot === 'string' && screenshot.startsWith('data:image')) {
+      if (hasScreenshot) {
         const [meta, b64] = screenshot.split(',')
         const mediaType = (meta.match(/data:(image\/\w+);/)?.[1] || 'image/png') as
-          | 'image/png'
-          | 'image/jpeg'
-          | 'image/webp'
-          | 'image/gif'
+          | 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
         userContent.push({
           type: 'image',
           source: { type: 'base64', media_type: mediaType, data: b64 },
         })
       }
 
-      userContent.push({
-        type: 'text',
-        text: `You are an expert at making an existing web page SELF-CONTAINED without changing how it looks.
+      const preservePrompt = `You are an expert at making an existing web page SELF-CONTAINED without changing how it looks.
 
-You are given the page's HTML, and (when present) the CSS is already inlined inside <style> tags within that HTML. ${screenshot ? 'You are ALSO given a screenshot of the rendered page — treat the screenshot as the source of truth for visual appearance and match it exactly.' : ''}${trimmed ? '\n\nNOTE: The source was very large and has been truncated. Reproduce everything you were given; if the markup ends mid-element, close tags cleanly so the output is valid HTML.' : ''}
+You are given the page's HTML with CSS inlined inside <style> tags.${hasScreenshot ? ' You ALSO have a screenshot of the rendered page — treat it as the source of truth for appearance and match it exactly.' : ''}
 
-YOUR JOB IS TO PRESERVE, NOT REBUILD.
-Do NOT redesign, re-author, "improve", simplify, or re-create the page from scratch. Reproduce it.
+YOUR JOB IS TO PRESERVE, NOT REBUILD. Do NOT redesign, "improve", or re-create from scratch.
 
-PRESERVE EXACTLY:
-- The same HTML structure, element order, nesting, class names, ids, and ALL text content — verbatim.
-- ALL CSS values exactly as given: every hex color, rgba, px value, font-family, font-weight, line-height, letter-spacing, border-radius, box-shadow, gap, padding, margin, max-width, grid/flex rule. Copy them; do not invent or "round" them.
-- ALL image src URLs, background-image URLs, and asset links exactly as they appear.
-- The exact fonts referenced in the source (keep the original @import / font-family). Do NOT substitute Oswald/Inter/Lato unless the source actually uses them.
+PRESERVE EXACTLY: structure, element order, class names, ids, ALL text verbatim; every CSS value (hex, rgba, px, font-family, weight, line-height, letter-spacing, radius, shadow, gap, padding, margin, max-width, grid/flex) exactly; all image/background URLs; the original fonts.
 
-MAKE IT SELF-CONTAINED (the only changes you may make):
-- Consolidate all CSS into a single <style> tag in <head>, keeping every value identical.
-- For interactive behavior that has NO inline handler (accordions, countdown timers, sliders, sticky bars, marquees), recreate it with minimal vanilla JavaScript in one <script> tag, matching the original behavior.
-- Convert relative asset paths to absolute URLs where you can infer the origin.
-- Remove ONLY: Shopify Liquid tags, tracking pixels, analytics, and third-party app <script> tags.
-- Keep it mobile responsive using the source's own media queries — do not change the breakpoints.
+MAKE IT SELF-CONTAINED (only allowed changes): consolidate CSS into one <style> in <head> with identical values; recreate JS-only interactivity (accordions, countdowns, sticky bars) with minimal vanilla JS; make relative asset paths absolute; remove ONLY Liquid tags, tracking pixels, analytics, third-party app scripts; keep the source's own media queries.
 
-OUTPUT RULES:
-- One self-contained HTML file beginning with <!DOCTYPE html>.
-- Output ONLY raw HTML. No explanation, no markdown, no code fences.
+OUTPUT: one file starting with <!DOCTYPE html>. Raw HTML only — no explanation, no markdown, no code fences.
 
 HERE IS THE SOURCE (HTML with CSS inlined):
-${source}`,
-      })
+${source}`
+
+      const rebuildPrompt = `You are an elite frontend developer. Rebuild a landing page as ONE clean, self-contained HTML file.
+
+This page was built with a page-builder, so its original markup is bloated and is NOT provided. Instead you have:
+1. ${hasScreenshot ? 'A SCREENSHOT of the rendered page — your SOURCE OF TRUTH for layout, colors, spacing, fonts, and section order. Match it as closely as possible.' : 'NO screenshot — infer a clean, attractive advertorial layout from the content below.'}
+2. A content extract listing the exact text, headings, button labels, image URLs, and links, IN PAGE ORDER.
+
+RULES:
+- ${hasScreenshot ? 'Reproduce the visual design from the screenshot: section order, layout (hero, comparison table, byline, reviews, FAQ, CTAs, sticky bars), colors (read hex values off the screenshot), fonts, rounded corners, shadows, spacing.' : 'Lay out the sections cleanly in the order given, like a high-converting advertorial.'}
+- Use the EXACT text from the extract — do not paraphrase, invent, or omit copy.
+- Use the EXACT image URLs ([IMAGE] lines) and link/button targets from the extract.
+- Clean semantic HTML, all CSS in one <style> tag in <head>. Load matching Google Fonts.
+- Recreate interactive elements (countdown timers, accordions, sticky CTA bars, comparison tables) with vanilla JS in one <script> tag.
+- Fully mobile responsive with media queries.
+
+OUTPUT: one file starting with <!DOCTYPE html>. Raw HTML only — no explanation, no markdown, no code fences.
+
+CONTENT EXTRACT (in page order):
+${source}`
+
+      userContent.push({ type: 'text', text: mode === 'preserve' ? preservePrompt : rebuildPrompt })
 
       const message = await anthropic.messages.create({
         model: 'claude-opus-4-8',
@@ -83,7 +82,6 @@ ${source}`,
         messages: [{ role: 'user', content: userContent }],
       })
 
-      // Concatenate every text block (long outputs can arrive in multiple blocks)
       html = message.content
         .filter((b): b is Anthropic.TextBlock => b.type === 'text')
         .map(b => b.text)
@@ -93,13 +91,14 @@ ${source}`,
         .replace(/\n?```$/, '')
         .trim()
 
-      // If the model ran out of output room, tell the client clearly.
       if (message.stop_reason === 'max_tokens') {
         return NextResponse.json({
           html,
-          warning: 'Output hit the length limit and may be cut off. The page is very large — try removing some sections or use a screenshot-based rebuild.',
+          warning: 'Output hit the length limit and may be cut off near the bottom.',
         })
       }
+
+      return NextResponse.json({ html, mode })
     } else {
       const { generateAdvertorial } = await import('@/lib/claude')
 
@@ -128,12 +127,11 @@ OUTPUT: Complete self-contained HTML only. No explanations. No markdown.`
 
       html = await generateAdvertorial(prompt)
       html = html.replace(/^```html\n?/i, '').replace(/^```\n?/, '').replace(/\n?```$/, '').trim()
-    }
 
-    return NextResponse.json({ html })
+      return NextResponse.json({ html })
+    }
   } catch (e: any) {
     console.error('Generate error:', e)
-    // Always return JSON so the frontend never chokes on "not valid JSON"
     return NextResponse.json({ error: e?.message || 'Generation failed' }, { status: 500 })
   }
 }
